@@ -18,35 +18,25 @@
 
 package org.apache.hadoop.mapreduce.lib.input;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.fs.BlockLocation;
-import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.mapred.LocatedFileStatusFetcher;
-import org.apache.hadoop.mapred.SplitLocationInfo;
-import org.apache.hadoop.mapreduce.InputFormat;
-import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.JobContext;
-import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 
 /** 
  * A base class for file-based {@link InputFormat}s.
@@ -78,6 +68,7 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
   public static final int DEFAULT_LIST_STATUS_NUM_THREADS = 1;
 
   private static final Log LOG = LogFactory.getLog(FileInputFormat.class);
+  public static final Log fangLOG = LogFactory.getLog("fang");
 
   private static final double SPLIT_SLOP = 1.1;   // 10% slop
   
@@ -278,7 +269,7 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Time taken to get FileStatuses: " + sw.elapsedMillis());
     }
-    LOG.info("Total input paths to process : " + result.size()); 
+    LOG.info("input:::::::::Total input paths to process : " + result.size());
     return result;
   }
 
@@ -383,6 +374,15 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
     // generate splits
     List<InputSplit> splits = new ArrayList<InputSplit>();
     List<FileStatus> files = listStatus(job);
+
+    //MAJOR ADD
+    HashMap<String,String> srcs = new HashMap<String, String>();
+    HashMap<String,List<String>> locations = new HashMap<String,List<String>>();
+    HashMap<String,Long> offsets = new HashMap<String, Long>();
+    HashMap<String,Long> lengths = new HashMap<String, Long>();
+    int count = 0;
+    //MAJOR ADD END
+
     for (FileStatus file: files) {
       Path path = file.getPath();
       long length = file.getLen();
@@ -417,11 +417,47 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
           splits.add(makeSplit(path, 0, length, blkLocations[0].getHosts(),
                       blkLocations[0].getCachedHosts()));
         }
+
+        //fang add
+        for (BlockLocation loc : blkLocations) {
+          srcs.put(String.valueOf(count), file.getPath().toString());
+          ArrayList<String> locs = new ArrayList<String>();
+          for (String host : loc.getHosts()) {
+            locs.add(host);
+          }
+          locations.put(String.valueOf(count), locs);
+          offsets.put(String.valueOf(count), loc.getOffset());
+          lengths.put(String.valueOf(count), loc.getLength());
+          count++;
+        }
+        //fang end
       } else { 
         //Create empty hosts array for zero length files
         splits.add(makeSplit(path, 0, length, new String[0]));
       }
     }
+
+    //fang add
+    fangLOG.info("fang--------------FileInputFormat->getsplits()->MajorClient.updateSplits");
+    for (String spid : srcs.keySet()) {
+      String s = srcs.get(spid);
+      List<String> loc = locations.get(spid);
+      HashSet<String> locset = new HashSet<String>();
+      String locstr = "";
+      for (String nodeid : loc) {
+        locset.add(nodeid);
+        locstr += loc + "|";
+      }
+      Long o = offsets.get(spid);
+      Long l = lengths.get(spid);
+      s = formatSplitSrc(s);
+
+      String id = s + "|" + o + "|" + l;
+
+      fangLOG.info("!!!updateSplits: " + id + "|" + locstr);
+    }
+    //fang end
+
     // Save the number of input files for metrics/loadgen
     job.getConfiguration().setLong(NUM_INPUT_FILES, files.size());
     sw.stop();
@@ -576,6 +612,14 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
       result[i] = new Path(StringUtils.unEscapeString(list[i]));
     }
     return result;
+  }
+
+  //fang add
+  public String formatSplitSrc (String src) {
+    if (src.indexOf("/user") != -1) {
+      src = src.substring(src.indexOf("/user"));
+    }
+    return src;
   }
 
 }
