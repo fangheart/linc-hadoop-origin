@@ -100,6 +100,7 @@ public class FifoScheduler extends
 
   private static final Log LOG = LogFactory.getLog(FifoScheduler.class);
   private static final Log LOG2 = LogFactory.getLog("Major");
+  private static final Log fangLOG = LogFactory.getLog("fang");
   private static final RecordFactory recordFactory =
     RecordFactoryProvider.getRecordFactory(null);
 
@@ -585,6 +586,9 @@ public class FifoScheduler extends
             " #assigned=" +
             (nodeLocalContainers + rackLocalContainers + offSwitchContainers));
     LOG2.info("##### assignContainersOnNode " + node.getNodeName() + " " + (nodeLocalContainers + rackLocalContainers + offSwitchContainers));
+
+    fangLOG.info("##### assignContainersOnNode " + node.getNodeName() + " " + (nodeLocalContainers + rackLocalContainers + offSwitchContainers));
+
     return (nodeLocalContainers + rackLocalContainers + offSwitchContainers);
   }
 

@@ -6,6 +6,7 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import sun.rmi.runtime.Log;
 
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.Map;
  * Created by Majorshi on 16/12/9.
  */
 public class MajorClient {
+
     public static void updateTaskInfo(String appid, Map<String,List<String>> taskinfo, int totalContainers, int core, int memory) {
         try {
             // 设置调用的服务地址为本地，端口为 7911

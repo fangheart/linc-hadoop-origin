@@ -16,56 +16,12 @@
  * limitations under the License.
  */
 package org.apache.hadoop.hdfs;
-import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
-import java.io.EOFException;
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.fs.ByteBufferReadable;
-import org.apache.hadoop.fs.ByteBufferUtil;
-import org.apache.hadoop.fs.CanSetDropBehind;
-import org.apache.hadoop.fs.CanSetReadahead;
-import org.apache.hadoop.fs.ChecksumException;
-import org.apache.hadoop.fs.FSInputStream;
-import org.apache.hadoop.fs.HasEnhancedByteBufferAccess;
-import org.apache.hadoop.fs.ReadOption;
-import org.apache.hadoop.fs.UnresolvedLinkException;
-import org.apache.hadoop.hdfs.Major.MajorClient;
-import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
-import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
-import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
-import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.fs.*;
+import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.datatransfer.InvalidEncryptionKeyException;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
@@ -80,7 +36,15 @@ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.IdentityHashStore;
 
-import com.google.common.annotations.VisibleForTesting;
+import java.io.EOFException;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.*;
 
 /****************************************************************
  * DFSInputStream provides bytes from a named file.  It handles 
@@ -106,6 +70,12 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private long blockEnd = -1;
   private CachingStrategy cachingStrategy;
   private final ReadStatistics readStatistics = new ReadStatistics();
+
+  //fang add
+  private String localHostname;
+
+  //public static final Log fangLOG = LogFactory.getLog("fang");
+  //fang end
 
   /**
    * Track the ByteBuffers that we have handed out to readers.
@@ -595,6 +565,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         if(connectFailedOnce) {
           DFSClient.LOG.info("Successfully connected to " + targetAddr +
                              " for " + blk);
+          DFSClient.fangLOG.info("Successfully connected to " + targetAddr +
+                  " for " + blk);
         }
         return chosenNode;
       } catch (IOException ex) {
@@ -799,16 +771,63 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           // error on the same block. See HDFS-3067
           if (pos > blockEnd || currentNode == null) {
             currentNode = blockSeekTo(pos);
+
+            DFSClient.fangLOG.info("readWithStrategy currentNode=" + currentNode.getHostName());
           }
           int realLen = (int) Math.min(len, (blockEnd - pos + 1L));
           if (locatedBlocks.isLastBlockComplete()) {
             realLen = (int) Math.min(realLen, locatedBlocks.getFileLength());
           }
           int result = readBuffer(strategy, off, realLen, corruptedBlockMap);
-          
+
+          //DFSClient.fangLOG.info("readWithStrategy result=" + result);
+
           if (result >= 0) {
+            //fang add
+            LocatedBlock targetBlock1 = getBlockAt( pos, true );
+
+            //DFSClient.fangLOG.info( "!!!!! Block:" + targetBlock1.getBlock().getBlockName());
+
+            //DFSClient.fangLOG.info("targetBlock1 get");
+            long endoffset = targetBlock1.getStartOffset() + targetBlock1.getBlockSize();
+            //DFSClient.fangLOG.info("endoffset get");
             pos += result;
-          } else {
+
+            //fang add
+            //DFSClient.fangLOG.info( "result=" + result );
+            //DFSClient.fangLOG.info( "pos=" + pos );
+            //fang end
+
+            if (pos == endoffset) {
+              if (!localHostname.equals( currentNode.getHostName() )) {
+                if (!src.endsWith( ".jar" ) && !src.endsWith( ".xml" ) && !src.endsWith( ".splitmetainfo" ) && !src.endsWith( ".split" )) {
+
+
+                  //DFSClient.fangLOG.info( "DFSInputStream->readWithStrategy()->MajorClient->blockLoadCompleted" );
+                  //DFSClient.fangLOG.info( "!!!!! Block " + targetBlock1.getBlock().getBlockName() + " 传输完成！" + " from: " + currentNode.getHostName() + " to:" + localHostname );
+
+                  //fangLOG.info( "DFSInputStream->readWithStrategy()->MajorClient->blockLoadCompleted" );
+                 // fangLOG.info( "!!!!! Block " + targetBlock1.getBlock().getBlockName() + " 传输完成！" + " from: " + currentNode.getHostName() + " to:" + localHostname );
+                }
+              }
+              ArrayList<LocatedBlock> blks = new ArrayList<LocatedBlock>();
+              blks.add( targetBlock1 );
+              BlockLocation[] loc = DFSUtil.locatedBlocks2Locations( locatedBlocks );
+              for (BlockLocation l : loc) {
+                String names = "";
+                for (String name : l.getNames()) {
+                  names += name + ";";
+                }
+                String hosts = "";
+                for (String host : l.getHosts()) {
+                  hosts += host + ";";
+                }
+                DFSClient.fangLOG.info( "BlockLocation: " + names + "|" + hosts + "|" + l.getLength() + "|" + l.getOffset() );
+              }
+              DFSClient.fangLOG.info( "!!! pos=endoffset:" + currentNode.getHostName() + "|" + targetBlock1.getBlock().getBlockName() );
+              DFSClient.fangLOG.info( "================================================================================================" );
+            }
+          }else {
             // got a EOS from reader though we expect more data on it.
             throw new IOException("Unexpected EOS from the reader");
           }
@@ -875,6 +894,47 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
   private DNAddrPair chooseDataNode(LocatedBlock block,
       Collection<DatanodeInfo> ignoredNodes) throws IOException {
+
+    //fang add
+    String choosenNode = "";
+    HashMap<String, DatanodeInfo> datanodeMap = new HashMap<String, DatanodeInfo>();
+    HashSet<String> ignore = new HashSet<String>();
+    if (ignoredNodes != null) {
+      for (DatanodeInfo dn : ignoredNodes) {
+        if (dn.getHostName() != null) {
+          ignore.add(dn.getHostName());
+        }
+      }
+    }
+
+    DatanodeInfo[] datanodes = block.getLocations();
+    ArrayList<String> nodeid = new ArrayList<String>();
+    for (DatanodeInfo no : datanodes) {
+      if (!ignore.contains(no.getHostName())) {
+        nodeid.add(no.getHostName());
+        datanodeMap.put(no.getHostName(), no);
+      }
+    }
+    String currentHostName = "";
+
+    try {
+      currentHostName = (InetAddress.getLocalHost()).getHostName();
+    } catch (UnknownHostException uhe) {
+      String host = uhe.getMessage(); // host = "hostname: hostname"
+      if (host != null) {
+        int colon = host.indexOf(':');
+        if (colon > 0) {
+          currentHostName = host.substring(0, colon);
+        }
+      }
+      currentHostName = "UnknownHost";
+    }
+    localHostname = currentHostName;
+
+    DFSClient.fangLOG.info("chooseDataNode");
+    DFSClient.fangLOG.info(block.getBlock().getBlockId()  +"  to:" + localHostname);
+    //fang end
+
     while (true) {
       DatanodeInfo[] nodes = block.getLocations();
       try {

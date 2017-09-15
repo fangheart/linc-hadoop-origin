@@ -87,6 +87,7 @@ public class RMContainerAllocator extends RMContainerRequestor
 
   static final Log LOG = LogFactory.getLog(RMContainerAllocator.class);
   static final Log LOG2 = LogFactory.getLog("Major");
+  static final Log fangLOG = LogFactory.getLog("fang");
   public static final 
   float DEFAULT_COMPLETED_MAPS_PERCENT_FOR_REDUCE_SLOWSTART = 0.05f;
   
@@ -1192,6 +1193,12 @@ public class RMContainerAllocator extends RMContainerRequestor
             containerAssigned(allocated, assigned);
             it.remove();
             MajorClient.justLog("NODELOCAl:" + allocated.getNodeId().getHost() + ":" + tId.toString());
+
+            //fang add
+            fangLOG.info( tId.toString()+"place to:" + allocated.getNodeId().getHost() + "|node local");
+            MajorClient.justLog("fang-------"+tId.toString()+"place to:" + allocated.getNodeId().getHost() + "|node local");
+            //fang end
+
             JobCounterUpdateEvent jce =
                     new JobCounterUpdateEvent(assigned.attemptID.getTaskId().getJobId());
             jce.addCounterUpdate(JobCounter.DATA_LOCAL_MAPS, 1);
@@ -1224,6 +1231,12 @@ public class RMContainerAllocator extends RMContainerRequestor
             it.remove();
             MajorClient.justLog("RACKLOCAL:" + allocated.getNodeId().getHost() + ":" + tId.toString());
             MajorClient.justLog("UNLOCALTASK|" + applicationId.toString());
+
+            //fang add
+            fangLOG.info( tId.toString()+"place to:" + allocated.getNodeId().getHost() + "|rack local");
+            MajorClient.justLog("fang-------"+ tId.toString()+"place to:" + allocated.getNodeId().getHost() + "|rack local");
+            //fang end
+
             JobCounterUpdateEvent jce =
               new JobCounterUpdateEvent(assigned.attemptID.getTaskId().getJobId());
             jce.addCounterUpdate(JobCounter.RACK_LOCAL_MAPS, 1);

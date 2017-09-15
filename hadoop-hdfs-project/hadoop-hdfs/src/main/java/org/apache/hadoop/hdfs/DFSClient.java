@@ -212,6 +212,11 @@ import com.google.common.net.InetAddresses;
 @InterfaceAudience.Private
 public class DFSClient implements java.io.Closeable, RemotePeerFactory {
   public static final Log LOG = LogFactory.getLog(DFSClient.class);
+
+  //fang add
+  public static final Log fangLOG = LogFactory.getLog("fang");
+  //fang end
+
   public static final long SERVER_DEFAULTS_VALIDITY_PERIOD = 60 * 60 * 1000L; // 1 hour
   static final int TCP_WINDOW_SIZE = 128 * 1024; // 128 KB
 
